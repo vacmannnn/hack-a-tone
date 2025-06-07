@@ -22,28 +22,18 @@ var (
 	RestartDeployment = "Перезагрузить деплоймент 🔄"
 	RestartPod        = "Перезагрузить под 🔁"
 	RollbackVersion   = "Откатить версию 🔙"
-	GoBack            = "Вернуться ◀️"
 	LoremIpsum        = "Lorem ipsum 💬"
-	Status            = "Посмотреть метрики "
 )
 
-var startScreen = tgbotapi.NewReplyKeyboard(
+var actionButtons = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton(LoremIpsum),
 		tgbotapi.NewKeyboardButton(ViewData),
+		tgbotapi.NewKeyboardButton(RollbackVersion),
 	),
-)
-
-var someActionButtons = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton(AddPods),
 		tgbotapi.NewKeyboardButton(RemovePods),
 		tgbotapi.NewKeyboardButton(RestartDeployment),
-		tgbotapi.NewKeyboardButton(RollbackVersion),
-	),
-	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton(ViewData),
-		tgbotapi.NewKeyboardButton(GoBack),
 	),
 )
 
@@ -223,17 +213,12 @@ func (b *Bot) start() {
 		case "/start":
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Привет ! Я создан для того, чтобы ..."+
 				"\nСконфигурируй систему, с которой хочешь работать")
-			msg.ReplyMarkup = startScreen
-			b.bot.Send(msg)
-
-		case GoBack:
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выбери, что хочешь сделать:")
-			msg.ReplyMarkup = startScreen
+			msg.ReplyMarkup = actionButtons
 			b.bot.Send(msg)
 
 		case LoremIpsum:
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выбери действие, которое хочешь сделать")
-			msg.ReplyMarkup = someActionButtons
+			msg.ReplyMarkup = actionButtons
 			b.bot.Send(msg)
 
 		case RollbackVersion:
@@ -337,7 +322,7 @@ func (b *Bot) start() {
 					continue
 				}
 				newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Добавлено %d подиков", number))
-				newAsk.ReplyMarkup = startScreen
+				newAsk.ReplyMarkup = actionButtons
 				b.bot.Send(newAsk)
 			}
 		case RemovePods:
@@ -362,7 +347,7 @@ func (b *Bot) start() {
 					continue
 				}
 				newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Убавлено %d подиков", number))
-				newAsk.ReplyMarkup = startScreen
+				newAsk.ReplyMarkup = actionButtons
 				b.bot.Send(newAsk)
 			}
 		default:
