@@ -281,7 +281,7 @@ type PodStatus struct {
 }
 
 type DeployStatus struct {
-	status string
+	Status string
 	Pods   map[string]PodStatus
 }
 
@@ -333,7 +333,7 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatu
 		}
 
 		result = append(result, DeployStatus{
-			status: deployStatus,
+			Status: deployStatus,
 			Pods:   pods,
 		})
 	}

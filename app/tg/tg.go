@@ -24,6 +24,7 @@ var (
 	RollbackVersion   = "Откатить версию 🔙"
 	GoBack            = "Вернуться ◀️"
 	LoremIpsum        = "Lorem ipsum 💬"
+	Status            = "Посмотреть метрики "
 )
 
 var startScreen = tgbotapi.NewReplyKeyboard(
