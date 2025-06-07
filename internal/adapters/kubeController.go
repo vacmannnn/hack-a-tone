@@ -26,6 +26,33 @@ func NewKubeRuntimeController() port.KubeController {
 	return &KubeRuntimeController{}
 }
 
+func (ctrl *KubeRuntimeController) GetDeploymentFromPod(ctx context.Context, pod *corev1.Pod) (string, error) {
+	var replicaSet *v1.ReplicaSet
+	for _, ownerRef := range pod.OwnerReferences {
+		if ownerRef.Kind == "ReplicaSet" {
+			rs := &v1.ReplicaSet{}
+			err := ctrl.client.Get(ctx, client.ObjectKey{
+				Namespace: pod.Namespace,
+				Name:      ownerRef.Name,
+			}, rs)
+			if err != nil {
+				return "", fmt.Errorf("failed to get ReplicaSet %s: %w", ownerRef.Name, err)
+			}
+			replicaSet = rs
+			break
+		}
+	}
+	if replicaSet == nil {
+		return "", fmt.Errorf("no ReplicaSet owner reference found for Pod %s", pod.Name)
+	}
+	for _, ownerRef := range replicaSet.OwnerReferences {
+		if ownerRef.Kind == "Deployment" {
+			return ownerRef.Name, nil
+		}
+	}
+	return "", fmt.Errorf("no Deployment owner reference found for ReplicaSet %s", replicaSet.Name)
+}
+
 func (ctrl *KubeRuntimeController) GetAllPods(ctx context.Context, nameSpace string) (*corev1.PodList, error) {
 	response := &corev1.PodList{}
 

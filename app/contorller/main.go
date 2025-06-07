@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"hack-a-tone/internal/adapters"
 	"log/slog"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	namespace := ""
+
 	defer stop()
 
 	slog.SetDefault(adapters.SetupLogger(adapters.EnvLocal))
@@ -24,15 +27,20 @@ func main() {
 		return
 	}
 
-	//p, err := controller.GetAllPods(ctx)
-	//if err != nil {
-	//	slog.Error("Не удалось получить список подов", "error", err)
-	//	return
-	//}
-	//
-	//for _, pod := range p.Items {
-	//	fmt.Printf("Pod: %s, Namespace: %s, Status: %s\n", pod.Name, pod.Namespace, pod.Status.Phase)
-	//}
+	p, err := controller.GetAllPods(ctx, namespace)
+	if err != nil {
+		slog.Error("Не удалось получить список подов", "error", err)
+		return
+	}
+
+	for _, pod := range p.Items {
+		d, err := controller.GetDeploymentFromPod(ctx, &pod)
+		if err != nil {
+			slog.Error("Не удалось получить имя деплоймента", "error", err)
+			d = "unknown"
+		}
+		fmt.Printf("Pod: %s, Namespace: %s, DeployName %s, Status: %s\n", pod.Name, pod.Namespace, d, pod.Status.Phase)
+	}
 
 	// -------------
 
@@ -42,9 +50,9 @@ func main() {
 	//	return
 	//}
 
-	err = controller.RestartDeployment(ctx, "my-nginx", "default")
-	if err != nil {
-		slog.Error("Не удалось перезагрузить деплоймент", "error", err)
-		return
-	}
+	//err = controller.RestartDeployment(ctx, "my-nginx", "default")
+	//if err != nil {
+	//	slog.Error("Не удалось перезагрузить деплоймент", "error", err)
+	//	return
+	//}
 }
