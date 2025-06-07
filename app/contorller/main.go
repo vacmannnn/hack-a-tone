@@ -34,9 +34,17 @@ func main() {
 	//	fmt.Printf("Pod: %s, Namespace: %s, Status: %s\n", pod.Name, pod.Namespace, pod.Status.Phase)
 	//}
 
-	err = controller.ScalePod(ctx, "my-nginx", "default", 1)
+	// -------------
+
+	//err = controller.ScalePod(ctx, "my-nginx", "default", 2)
+	//if err != nil {
+	//	slog.Error("Не удалось увеличить количество подов", "error", err)
+	//	return
+	//}
+
+	err = controller.RestartDeployment(ctx, "my-nginx", "default")
 	if err != nil {
-		slog.Error("Не удалось увеличить количество подов", "error", err)
+		slog.Error("Не удалось перезагрузить деплоймент", "error", err)
 		return
 	}
 }

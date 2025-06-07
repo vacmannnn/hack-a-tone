@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"time"
 )
 
 const TlsOFF = true
@@ -33,9 +34,22 @@ func (ctrl *KubeRuntimeController) GetAllPods(ctx context.Context) (*corev1.PodL
 	return response, err
 }
 
-func (ctrl *KubeRuntimeController) RestartPod() {
-	//TODO implement me
-	panic("implement me")
+func (ctrl *KubeRuntimeController) RestartDeployment(ctx context.Context, deployName, nameSpace string) error {
+	deployment := &v1.Deployment{}
+	if err := ctrl.client.Get(ctx, types.NamespacedName{Name: deployName, Namespace: nameSpace}, deployment); err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = map[string]string{}
+	}
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+	if err := ctrl.client.Update(ctx, deployment); err != nil {
+		return fmt.Errorf("failed to update deployment: %w", err)
+	}
+
+	return nil
 }
 
 func (ctrl *KubeRuntimeController) ScalePod(ctx context.Context, deployName, nameSpace string, scaleNumber int32) error {

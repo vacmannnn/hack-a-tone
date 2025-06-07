@@ -7,7 +7,7 @@ import (
 
 type KubeController interface {
 	GetAllPods(ctx context.Context) (*corev1.PodList, error)
-	RestartPod()
+	RestartDeployment(ctx context.Context, deployName, nameSpace string) error
 	ScalePod(ctx context.Context, deployName, nameSpace string, scaleNumber int32) error
 	Start(ctx context.Context) error
 }
