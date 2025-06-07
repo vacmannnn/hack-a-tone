@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	tgbotapi "github.com/Syfaro/telegram-bot-api"
 	"hack-a-tone/internal/core/port"
+	"log"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -100,6 +103,22 @@ func WaitNumber(b *Bot, updates *tgbotapi.UpdatesChannel, chatID int64, start st
 	return -1
 }
 
+func getRevisionsString(b *Bot, ns string, depl string) (string, []string, error) {
+	revs, err := b.k8sController.GetAvailableRevisions(context.Background(), depl, ns)
+	if err != nil {
+		slog.Error("Не удалось получить все ревизии", err)
+		return "", []string{}, err
+	} else {
+		sort.Sort(sort.Reverse(sort.StringSlice(revs)))
+		out := make([]string, len(revs))
+		for i, _ := range revs {
+			out[i] = fmt.Sprintf("%d) %s", i+1, revs[i])
+		}
+		str := strings.Join(out, "\n")
+		return str, revs, nil
+	}
+}
+
 func getNamespacesString() string {
 	out := make([]string, len(registeredNamespaces))
 	for i, ns := range registeredNamespaces {
@@ -126,6 +145,21 @@ func getDeploymentsString(b *Bot, ns string) (string, []string, error) {
 	}
 }
 
+type ActionData struct {
+	Answer        string `json:"a"`
+	CurRevVersion string `json:"r"`
+	CurDeploy     string `json:"d"`
+	CurNamespace  string `json:"n"`
+}
+
+func mustJSON(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Panicf("json marshal failed: %v", err)
+	}
+	return string(b)
+}
+
 func (b *Bot) start() {
 	// Set update timeout
 	u := tgbotapi.NewUpdate(0)
@@ -134,10 +168,55 @@ func (b *Bot) start() {
 	// Get updates from bot
 	updates, _ := b.bot.GetUpdatesChan(u)
 
+	handlers := map[string]func(*tgbotapi.BotAPI, *tgbotapi.CallbackQuery){
+		"yes": func(b1 *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+			var data ActionData
+			json.Unmarshal([]byte(cq.Data), &data)
+
+			err := b.k8sController.SetRevision(context.Background(), data.CurDeploy, data.CurNamespace, data.CurRevVersion)
+			if err != nil {
+				slog.Error("Сan not set revision number", err)
+			}
+
+			edit := tgbotapi.NewEditMessageText(
+				cq.Message.Chat.ID,
+				cq.Message.MessageID,
+				"Версия была установлена ✅",
+			)
+			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
+			b1.Send(edit)
+			b1.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, ""))
+		},
+		"no": func(b *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+			edit := tgbotapi.NewEditMessageText(
+				cq.Message.Chat.ID,
+				cq.Message.MessageID,
+				"Версия не была установлена ❌",
+			)
+			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
+			b.Send(edit)
+			b.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, ""))
+		},
+	}
+
 	for update := range updates {
-		if update.Message == nil || update.Message.Text == "" {
+		if update.Message == nil {
+			if cq := update.CallbackQuery; cq != nil {
+				var data ActionData
+				json.Unmarshal([]byte(cq.Data), &data)
+				if handler, found := handlers[data.Answer]; found {
+					handler(b.bot, cq) // вызываем нужный обработчик
+				} else {
+					// необработанный callbackData
+					b.bot.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, "Неизвестная кнопка"))
+				}
+			}
 			continue
 		}
+		if update.Message.Text == "" {
+			continue
+		}
+
 		OurChatID = update.Message.Chat.ID
 
 		switch update.Message.Text {
@@ -158,6 +237,63 @@ func (b *Bot) start() {
 			b.bot.Send(msg)
 
 		case ViewData:
+			ask1 := "В каком namespace (введите число)?\n"
+			ask2 := getNamespacesString()
+			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
+			if namespaceId == -1 {
+				continue
+			}
+			ns := registeredNamespaces[namespaceId-1]
+
+			ask3 := "В каком deployment (введите число)?\n"
+			ask4, depls, err := getDeploymentsString(b, ns)
+			if err != nil {
+				continue
+			}
+			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(depls)))
+			if deplId == -1 {
+				continue
+			}
+			deployment := depls[deplId-1]
+			ask5 := "Укажите номер ревизии:\n"
+			ask6, revs, err := getRevisionsString(b, ns, deployment)
+			if err != nil {
+				continue
+			}
+			revId := WaitNumber(b, &updates, update.Message.Chat.ID, ask5+ask6, int64(len(revs)))
+			if revId == -1 {
+				continue
+			}
+			revision := revs[revId-1]
+			print(deployment, " ", revision)
+
+			dataYes := ActionData{
+				Answer:        "yes",
+				CurRevVersion: revision,
+				CurDeploy:     deployment,
+				CurNamespace:  ns,
+			}
+			dataNo := ActionData{
+				Answer:        "no",
+				CurRevVersion: "1",
+				CurDeploy:     "1",
+				CurNamespace:  "1",
+			}
+
+			checkBtn := tgbotapi.NewInlineKeyboardButtonData("✅", mustJSON(dataYes))
+			crossBtn := tgbotapi.NewInlineKeyboardButtonData("❌", mustJSON(dataNo))
+			keyboard := tgbotapi.NewInlineKeyboardMarkup(
+				tgbotapi.NewInlineKeyboardRow(checkBtn, crossBtn),
+			)
+
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Восстановить ревизию?"))
+			msg.ReplyMarkup = keyboard
+
+			if _, err := b.bot.Send(msg); err != nil {
+				log.Println("Send message error:", err)
+			}
+
+		case "посмотреть данные о системе":
 			for _, namespace := range registeredNamespaces {
 				deployments, err := b.k8sController.GetDeployments(context.Background(), namespace)
 				if err != nil {
@@ -177,6 +313,9 @@ func (b *Bot) start() {
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
+			if namespaceId == -1 {
+				continue
+			}
 			ns := registeredNamespaces[namespaceId-1]
 
 			ask3 := "В каком deployment (введите число)?\n"
@@ -185,6 +324,9 @@ func (b *Bot) start() {
 				continue
 			}
 			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(depls)))
+			if deplId == -1 {
+				continue
+			}
 			deployment := depls[deplId-1]
 
 			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько увеличить?", 30)
