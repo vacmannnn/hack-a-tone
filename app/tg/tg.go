@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var OurChatID int64
+
 var startScreen = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton("Придумать название кнопки для действий надо бы"),
@@ -58,6 +60,7 @@ func (b *Bot) start() {
 		if update.Message == nil {
 			continue
 		}
+		OurChatID = update.Message.Chat.ID
 
 		var msg tgbotapi.MessageConfig
 
@@ -85,4 +88,12 @@ func (b *Bot) start() {
 		}
 		b.bot.Send(msg)
 	}
+}
+
+func (b *Bot) SendMsg(a Alert) {
+	var msg tgbotapi.MessageConfig
+
+	msg = tgbotapi.NewMessage(OurChatID, a.String())
+
+	b.bot.Send(msg)
 }
