@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hack-a-tone/internal/adapters"
+	"hack-a-tone/internal/core/utils"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -27,13 +28,24 @@ func main() {
 		return
 	}
 
-	r, err := controller.GetAvailableRevisions(ctx, "my-nginx", "default")
+	ds, err := controller.GetDeployments(ctx, "")
 	if err != nil {
-		slog.Error("Не удалось получить список ревизий", "error", err)
+		slog.Error("Не удалось получить список деплойментов", "error", err)
 		return
 	}
 
-	fmt.Println("Revisions: ", r)
+	for _, d := range ds.Items {
+		fmt.Println(d.Name, "have replicas count", utils.GetReplicasCountForDeployment(&d))
+	}
+
+	//
+	//r, err := controller.GetAvailableRevisions(ctx, "my-nginx", "default")
+	//if err != nil {
+	//	slog.Error("Не удалось получить список ревизий", "error", err)
+	//	return
+	//}
+	//
+	//fmt.Println("Revisions: ", r)
 
 	// -------------
 	//p, err := controller.GetAllPods(ctx, namespace)
