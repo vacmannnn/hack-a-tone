@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"hack-a-tone/internal/adapters"
 	"log/slog"
 	"os"
@@ -25,13 +24,19 @@ func main() {
 		return
 	}
 
-	p, err := controller.GetAllPods(ctx)
-	if err != nil {
-		slog.Error("Не удалось получить список подов", "error", err)
-		return
-	}
+	//p, err := controller.GetAllPods(ctx)
+	//if err != nil {
+	//	slog.Error("Не удалось получить список подов", "error", err)
+	//	return
+	//}
+	//
+	//for _, pod := range p.Items {
+	//	fmt.Printf("Pod: %s, Namespace: %s, Status: %s\n", pod.Name, pod.Namespace, pod.Status.Phase)
+	//}
 
-	for _, pod := range p.Items {
-		fmt.Printf("Pod: %s, Namespace: %s, Status: %s\n", pod.Name, pod.Namespace, pod.Status.Phase)
+	err = controller.ScalePod(ctx, "my-nginx", "default", 1)
+	if err != nil {
+		slog.Error("Не удалось увеличить количество подов", "error", err)
+		return
 	}
 }

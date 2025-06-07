@@ -2,8 +2,11 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 	"hack-a-tone/internal/core/port"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"log/slog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,9 +38,23 @@ func (ctrl *KubeRuntimeController) RestartPod() {
 	panic("implement me")
 }
 
-func (ctrl *KubeRuntimeController) ScalePod(name string, scaleNumber int) {
-	//TODO implement me
-	panic("implement me")
+func (ctrl *KubeRuntimeController) ScalePod(ctx context.Context, deployName, nameSpace string, scaleNumber int32) error {
+	deployment := &v1.Deployment{}
+	if err := ctrl.client.Get(ctx, types.NamespacedName{Name: deployName, Namespace: nameSpace}, deployment); err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	if *deployment.Spec.Replicas+scaleNumber < 0 {
+		return fmt.Errorf("count replicas less than zero")
+	}
+
+	*deployment.Spec.Replicas += scaleNumber
+
+	if err := ctrl.client.Update(ctx, deployment); err != nil {
+		return fmt.Errorf("failed to update deployment: %w", err)
+	}
+
+	return nil
 }
 
 func offTLS(cfg *rest.Config) {
