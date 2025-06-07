@@ -26,11 +26,31 @@ func NewKubeRuntimeController() port.KubeController {
 	return &KubeRuntimeController{}
 }
 
-func (ctrl *KubeRuntimeController) GetAllPods(ctx context.Context) (*corev1.PodList, error) {
+func (ctrl *KubeRuntimeController) GetAllPods(ctx context.Context, nameSpace string) (*corev1.PodList, error) {
 	response := &corev1.PodList{}
-	err := ctrl.client.List(ctx, response, &client.ListOptions{})
 
-	// TODO: example options field client.InNamespace("default")
+	opt := &client.ListOptions{}
+	if nameSpace != "" {
+		opt.Namespace = nameSpace
+	}
+	err := ctrl.client.List(ctx, response, opt)
+
+	return response, err
+}
+
+func (ctrl *KubeRuntimeController) GetDeployments(ctx context.Context, nameSpace string) (*v1.DeploymentList, error) {
+	response := &v1.DeploymentList{}
+
+	opt := &client.ListOptions{}
+	if nameSpace != "" {
+		opt.Namespace = nameSpace
+	}
+
+	err := ctrl.client.List(ctx, response, opt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployments: %w", err)
+	}
+
 	return response, err
 }
 
