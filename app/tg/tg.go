@@ -16,15 +16,14 @@ import (
 var OurChatID int64
 
 var (
-	ViewData             = "Посмотреть данные о системе 📊"
-	AddPods              = "Увеличить количество подов ➕"
-	RemovePods           = "Уменьшить количество подов ➖"
-	RestartDeployment    = "Перезагрузить деплоймент 🔄"
-	RestartPod           = "Перезагрузить под 🔁"
-	RollbackVersion      = "Откатить версию 🔙"
-	ViewRollbackVersions = "Посмотреть доступные версии для отката 📚"
-	GoBack               = "Вернуться ◀️"
-	LoremIpsum           = "Lorem ipsum 💬"
+	ViewData          = "Посмотреть данные о системе 📊"
+	AddPods           = "Увеличить количество подов ➕"
+	RemovePods        = "Уменьшить количество подов ➖"
+	RestartDeployment = "Перезагрузить деплоймент 🔄"
+	RestartPod        = "Перезагрузить под 🔁"
+	RollbackVersion   = "Откатить версию 🔙"
+	GoBack            = "Вернуться ◀️"
+	LoremIpsum        = "Lorem ipsum 💬"
 )
 
 var startScreen = tgbotapi.NewReplyKeyboard(
@@ -236,7 +235,7 @@ func (b *Bot) start() {
 			msg.ReplyMarkup = someActionButtons
 			b.bot.Send(msg)
 
-		case ViewData:
+		case RollbackVersion:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
@@ -293,7 +292,7 @@ func (b *Bot) start() {
 				log.Println("Send message error:", err)
 			}
 
-		case "посмотреть данные о системе":
+		case ViewData:
 			for _, namespace := range registeredNamespaces {
 				deployments, err := b.k8sController.GetDeployments(context.Background(), namespace)
 				if err != nil {
