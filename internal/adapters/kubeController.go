@@ -9,6 +9,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/metrics/pkg/client/clientset/versioned"
 	"log/slog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -19,8 +22,9 @@ import (
 const TlsOFF = true
 
 type KubeRuntimeController struct {
-	client client.Client
-	mgr    manager.Manager
+	client       client.Client
+	metricClient *versioned.Clientset
+	mgr          manager.Manager
 }
 
 func NewKubeRuntimeController() port.KubeController {
@@ -150,6 +154,14 @@ func (ctrl *KubeRuntimeController) Start(ctx context.Context) error {
 	}()
 
 	ctrl.client = mgr.GetClient()
+
+	c, err := versioned.NewForConfig(cfg)
+	if err != nil {
+		slog.Error("Не удалось создать client", "error", err)
+		return err
+	}
+
+	ctrl.metricClient = c
 	ctrl.mgr = mgr
 
 	return err
@@ -255,4 +267,102 @@ func (ctrl *KubeRuntimeController) SetRevision(ctx context.Context, deployName, 
 	slog.Info("Successfully set revision", "revision", revision, "deployment", deployName)
 
 	return nil
+}
+
+type ContainerStatus struct {
+	CPU    float64
+	Memory float64
+}
+
+type PodStatus struct {
+	Containers map[string]ContainerStatus
+	TotalCPU   float64
+	TotalMem   float64
+}
+
+type DeployStatus struct {
+	status string
+	Pods   map[string]PodStatus
+}
+
+func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatus, error) {
+	var deployments v1.DeploymentList
+	if err := ctrl.client.List(ctx, &deployments); err != nil {
+		return nil, fmt.Errorf("failed to list deployments: %w", err)
+	}
+
+	var result []DeployStatus
+
+	for _, deploy := range deployments.Items {
+		selector := client.MatchingLabels(deploy.Spec.Selector.MatchLabels)
+		var podList corev1.PodList
+		if err := ctrl.client.List(ctx, &podList, selector); err != nil {
+			return nil, fmt.Errorf("failed to list pods for deployment %s: %w", deploy.Name, err)
+		}
+
+		pods := make(map[string]PodStatus)
+
+		deployStatus := "Unknown"
+		if len(podList.Items) > 0 {
+			deployStatus = string(podList.Items[0].Status.Phase)
+		}
+
+		for _, pod := range podList.Items {
+			containers := make(map[string]ContainerStatus)
+			var totalCPU, totalMem float64
+
+			for _, cs := range pod.Status.ContainerStatuses {
+				cpuUsage, memUsage, err := ctrl.getContainerResourceUsage(ctx, cs.Name, pod.Name, pod.Namespace)
+				if err != nil {
+					slog.Error("Failed to get resource usage", "container", cs.Name, "pod", pod.Name, "namespace", pod.Namespace, "error", err)
+				}
+
+				containers[cs.Name] = ContainerStatus{
+					CPU:    cpuUsage,
+					Memory: memUsage,
+				}
+				totalCPU += cpuUsage
+				totalMem += memUsage
+			}
+
+			pods[pod.Name] = PodStatus{
+				Containers: containers,
+				TotalCPU:   totalCPU,
+				TotalMem:   totalMem,
+			}
+		}
+
+		result = append(result, DeployStatus{
+			status: deployStatus,
+			Pods:   pods,
+		})
+	}
+
+	return result, nil
+}
+
+func (ctrl *KubeRuntimeController) getContainerResourceUsage(ctx context.Context, containerName, podName, namespace string) (cpu float64, mem float64, err error) {
+	podMetrics, err := ctrl.metricClient.MetricsV1beta1().PodMetricses(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Ищем нужный контейнер в метриках
+	for _, c := range podMetrics.Containers {
+		if c.Name == containerName {
+			// CPU в наносекундах (обычно в формате Quantity)
+			cpuQuantity := c.Usage.Cpu()
+			memQuantity := c.Usage.Memory()
+
+			// Преобразуем CPU в float64 — количество ядер (например, 0.1 = 100m)
+			cpu = float64(cpuQuantity.MilliValue()) / 1000.0
+
+			// Преобразуем память в мегабайты
+			mem = float64(memQuantity.Value()) / (1024 * 1024)
+
+			return cpu, mem, nil
+		}
+	}
+	// Контейнер не найден в метриках
+	return 0, 0, fmt.Errorf("container %s not found in pod metrics %s/%s", containerName, namespace, podName)
 }

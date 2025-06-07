@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"hack-a-tone/internal/adapters"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -11,6 +12,7 @@ type KubeController interface {
 	GetDeploymentFromPod(ctx context.Context, pod *corev1.Pod) (string, error)
 	GetDeployments(ctx context.Context, nameSpace string) (*v1.DeploymentList, error)
 	RestartDeployment(ctx context.Context, deployName, nameSpace string) error
+	StatusAll(ctx context.Context) ([]adapters.DeployStatus, error)
 	ScalePod(ctx context.Context, deployName, nameSpace string, replicasCount int32) error
 	GetAvailableRevisions(ctx context.Context, deployName, nameSpace string) ([]string, error)
 	SetRevision(ctx context.Context, deployName, namespace string, revision string) error
