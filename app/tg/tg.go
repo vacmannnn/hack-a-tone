@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	tgbotapi "github.com/Syfaro/telegram-bot-api"
+	"hack-a-tone/internal/core/port"
 	"strings"
 )
 
@@ -26,12 +27,13 @@ var someActionButtons = tgbotapi.NewReplyKeyboard(
 )
 
 type Bot struct {
-	bot        *tgbotapi.BotAPI
-	userLogged map[string]bool
-	usersData  map[string]string
+	bot           *tgbotapi.BotAPI
+	k8sController port.KubeController
+	userLogged    map[string]bool
+	usersData     map[string]string
 }
 
-func NewBot(token string) *Bot {
+func NewBot(token string, k8sController port.KubeController) *Bot {
 	bot, err := tgbotapi.NewBotAPI(token)
 	// todo: not panic
 	if err != nil {
@@ -39,7 +41,8 @@ func NewBot(token string) *Bot {
 	}
 
 	return &Bot{
-		bot: bot,
+		bot:           bot,
+		k8sController: k8sController,
 	}
 }
 
