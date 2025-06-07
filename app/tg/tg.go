@@ -12,23 +12,35 @@ import (
 
 var OurChatID int64
 
+var (
+	ViewData             = "Посмотреть данные о системе 📊"
+	AddPods              = "Увеличить количество подов ➕"
+	RemovePods           = "Уменьшить количество подов ➖"
+	RestartDeployment    = "Перезагрузить деплоймент 🔄"
+	RestartPod           = "Перезагрузить под 🔁"
+	RollbackVersion      = "Откатить версию 🔙"
+	ViewRollbackVersions = "Посмотреть доступные версии для отката 📚"
+	GoBack               = "Вернуться ◀️"
+	LoremIpsum           = "Lorem ipsum 💬"
+)
+
 var startScreen = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("Придумать название кнопки для действий надо бы"),
-		tgbotapi.NewKeyboardButton("Посмотреть данные о системе"),
+		tgbotapi.NewKeyboardButton(LoremIpsum),
+		tgbotapi.NewKeyboardButton(ViewData),
 	),
 )
 
 var someActionButtons = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("Добавить подиков"),
-		tgbotapi.NewKeyboardButton("Уменьшить подиков"),
-		tgbotapi.NewKeyboardButton("Перезагрузить ... (pod/service)"),
-		tgbotapi.NewKeyboardButton("Rollback"),
+		tgbotapi.NewKeyboardButton(AddPods),
+		tgbotapi.NewKeyboardButton(RemovePods),
+		tgbotapi.NewKeyboardButton(RestartDeployment),
+		tgbotapi.NewKeyboardButton(RollbackVersion),
 	),
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("Посмотреть данные о системе"),
-		tgbotapi.NewKeyboardButton("Вернуться"),
+		tgbotapi.NewKeyboardButton(ViewData),
+		tgbotapi.NewKeyboardButton(GoBack),
 	),
 )
 
@@ -50,9 +62,9 @@ func contains(slice []string, target string) bool {
 
 func NewBot(token string, k8sController port.KubeController) *Bot {
 	bot, err := tgbotapi.NewBotAPI(token)
-	// todo: not panic
 	if err != nil {
-		panic(err)
+		slog.Error("Не удалось создать бота", "error", err)
+		return nil
 	}
 
 	return &Bot{
@@ -128,24 +140,24 @@ func (b *Bot) start() {
 		}
 		OurChatID = update.Message.Chat.ID
 
-		switch strings.ToLower(update.Message.Text) {
+		switch update.Message.Text {
 		case "/start":
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Привет ! Я создан для того, чтобы ..."+
 				"\nСконфигурируй систему, с которой хочешь работать")
 			msg.ReplyMarkup = startScreen
 			b.bot.Send(msg)
 
-		case "вернуться":
+		case GoBack:
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выбери, что хочешь сделать:")
 			msg.ReplyMarkup = startScreen
 			b.bot.Send(msg)
 
-		case "придумать название кнопки для действий надо бы":
+		case LoremIpsum:
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выбери действие, которое хочешь сделать")
 			msg.ReplyMarkup = someActionButtons
 			b.bot.Send(msg)
 
-		case "посмотреть данные о системе":
+		case ViewData:
 			for _, namespace := range registeredNamespaces {
 				deployments, err := b.k8sController.GetDeployments(context.Background(), namespace)
 				if err != nil {
@@ -161,7 +173,7 @@ func (b *Bot) start() {
 				}
 			}
 
-		case "добавить подиков":
+		case AddPods:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := printNamespaces()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
@@ -186,7 +198,7 @@ func (b *Bot) start() {
 				newAsk.ReplyMarkup = startScreen
 				b.bot.Send(newAsk)
 			}
-		case "уменьшить подиков":
+		case RemovePods:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := printNamespaces()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
