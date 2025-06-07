@@ -106,11 +106,11 @@ func (ctrl *KubeRuntimeController) ScalePod(ctx context.Context, deployName, nam
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	if *deployment.Spec.Replicas+scaleNumber < 0 {
+	if scaleNumber < 0 {
 		return fmt.Errorf("count replicas less than zero")
 	}
 
-	*deployment.Spec.Replicas += scaleNumber
+	*deployment.Spec.Replicas = scaleNumber
 
 	if err := ctrl.client.Update(ctx, deployment); err != nil {
 		return fmt.Errorf("failed to update deployment: %w", err)
