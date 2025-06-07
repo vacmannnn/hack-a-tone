@@ -12,6 +12,7 @@ type KubeController interface {
 	GetDeploymentFromPod(ctx context.Context, pod *corev1.Pod) (string, error)
 	GetDeployments(ctx context.Context, nameSpace string) (*v1.DeploymentList, error)
 	RestartDeployment(ctx context.Context, deployName, nameSpace string) error
+	RestartPod(ctx context.Context, nameSpace, podName string) error
 	StatusAll(ctx context.Context) ([]adapters.DeployStatus, error)
 	ScalePod(ctx context.Context, deployName, nameSpace string, replicasCount int32) error
 	GetAvailableRevisions(ctx context.Context, deployName, nameSpace string) ([]string, error)

@@ -269,6 +269,18 @@ func (ctrl *KubeRuntimeController) SetRevision(ctx context.Context, deployName, 
 	return nil
 }
 
+func (ctrl *KubeRuntimeController) RestartPod(ctx context.Context, nameSpace, podName string) error {
+	var pod *corev1.Pod
+	pod.Namespace = nameSpace
+	pod.Name = podName
+
+	if err := ctrl.client.Delete(ctx, pod); err != nil {
+		return fmt.Errorf("failed to delete pod %s/%s: %w", nameSpace, podName, err)
+	}
+
+	return nil
+}
+
 type ContainerStatus struct {
 	CPU    float64
 	Memory float64
