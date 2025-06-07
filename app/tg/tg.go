@@ -100,7 +100,7 @@ func WaitNumber(b *Bot, updates *tgbotapi.UpdatesChannel, chatID int64, start st
 	return -1
 }
 
-func printNamespaces() string {
+func getNamespacesString() string {
 	out := make([]string, len(registeredNamespaces))
 	for i, ns := range registeredNamespaces {
 		out[i] = fmt.Sprintf("%d) %s", i+1, ns)
@@ -109,7 +109,7 @@ func printNamespaces() string {
 	return str
 }
 
-func printDeployments(b *Bot, ns string) (string, []string, error) {
+func getDeploymentsString(b *Bot, ns string) (string, []string, error) {
 	deployments, err := b.k8sController.GetDeployments(context.Background(), ns)
 	if err != nil {
 		slog.Error("Не удалось получить все деплои", err)
@@ -175,19 +175,19 @@ func (b *Bot) start() {
 
 		case AddPods:
 			ask1 := "В каком namespace (введите число)?\n"
-			ask2 := printNamespaces()
+			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
 			ns := registeredNamespaces[namespaceId-1]
 
 			ask3 := "В каком deployment (введите число)?\n"
-			ask4, depls, err := printDeployments(b, ns)
+			ask4, depls, err := getDeploymentsString(b, ns)
 			if err != nil {
 				continue
 			}
 			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(depls)))
 			deployment := depls[deplId-1]
 
-			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько увеличить?", 1000)
+			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько увеличить?", 30)
 			if number != -1 {
 				err = b.k8sController.ScalePod(context.Background(), deployment, ns, int32(number))
 				if err != nil {
@@ -200,21 +200,21 @@ func (b *Bot) start() {
 			}
 		case RemovePods:
 			ask1 := "В каком namespace (введите число)?\n"
-			ask2 := printNamespaces()
+			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
 			ns := registeredNamespaces[namespaceId-1]
 
 			ask3 := "В каком deployment (введите число)?\n"
-			ask4, depls, err := printDeployments(b, ns)
+			ask4, depls, err := getDeploymentsString(b, ns)
 			if err != nil {
 				continue
 			}
 			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(depls)))
 			deployment := depls[deplId-1]
 
-			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько уменьшить?", 1000)
+			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько уменьшить?", 30)
 			if number != -1 {
-				err = b.k8sController.ScalePod(context.Background(), deployment, ns, int32(number))
+				err = b.k8sController.ScalePod(context.Background(), deployment, ns, int32(-number))
 				if err != nil {
 					slog.Error("Не удалось уменьшить подики", err)
 					continue
