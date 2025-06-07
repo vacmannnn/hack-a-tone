@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"time"
 )
 
 func main() {
@@ -17,6 +18,8 @@ func main() {
 
 	controller := adapters.NewKubeRuntimeController()
 	err := controller.Start(ctx)
+
+	time.Sleep(2 * time.Second)
 	if err != nil {
 		slog.Error("Не удалось запустить контроллер", "error", err)
 		return
