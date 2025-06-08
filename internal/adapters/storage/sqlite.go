@@ -113,8 +113,8 @@ func (r *SQLRepo) WriteAlert(alert domain.Alert, namespace string) error {
 	}
 
 	_, err = r.db.Exec(
-		"INSERT INTO alerts (namespace, status, labels) VALUES (?, ?, ?)",
-		alertDB.Namespace, alertDB.Status, string(labelsJson),
+		"INSERT INTO alerts (namespace, status, labels, summary) VALUES (?, ?, ?, ?)",
+		alertDB.Namespace, alertDB.Status, string(labelsJson), alert.Annotations.Summary,
 	)
 
 	return err
