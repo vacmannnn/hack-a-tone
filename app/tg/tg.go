@@ -587,8 +587,6 @@ func GetPhotoMessageForGrafana(chatId int64) *tgbotapi.PhotoConfig {
 		return nil
 	}
 
-	slog.Info("Got png", "width", img.Bounds().Dx(), "height", img.Bounds().Dy())
-
 	var buffNew []byte
 	buffNew, err = cropTopPixelsPNG(img, 130)
 
