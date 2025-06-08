@@ -186,6 +186,7 @@ func (ctrl *KubeRuntimeController) Start(ctx context.Context) error {
 		}
 	}()
 
+	time.Sleep(2 * time.Second)
 	slog.Info("Создание client controller runtime...")
 	ctrl.client = mgr.GetClient()
 
