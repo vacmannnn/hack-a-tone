@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
