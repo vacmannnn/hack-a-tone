@@ -329,6 +329,7 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]domain.Depl
 		}
 
 		result = append(result, domain.DeployStatus{
+			Name:   deploy.Name,
 			Status: deployStatus,
 			Pods:   pods,
 		})

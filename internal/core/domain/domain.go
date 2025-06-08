@@ -12,6 +12,7 @@ type PodStatus struct {
 }
 
 type DeployStatus struct {
+	Name   string
 	Status string
 	Pods   map[string]PodStatus
 }

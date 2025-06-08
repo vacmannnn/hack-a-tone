@@ -355,8 +355,8 @@ func (b *Bot) SendMsg(a Alert) {
 func PrettyPrintStatus(deploys []domain.DeployStatus) string {
 	var sb strings.Builder
 
-	for i, deploy := range deploys {
-		sb.WriteString(fmt.Sprintf("Deployment #%d - Status: %s\n", i+1, deploy.Status))
+	for _, deploy := range deploys {
+		sb.WriteString(fmt.Sprintf("Deployment: %s - Status: %s\n", deploy.Name, deploy.Status))
 		if len(deploy.Pods) == 0 {
 			sb.WriteString("\tNo pods found\n")
 			continue
