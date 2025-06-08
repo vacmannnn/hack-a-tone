@@ -568,7 +568,7 @@ func (b *Bot) start() {
 	}
 }
 
-var PodsThatWas map[string]string
+var PodsThatWas = map[string]string{}
 
 func (b *Bot) SendMsg(a domain.Alert) {
 	var msg tgbotapi.MessageConfig
