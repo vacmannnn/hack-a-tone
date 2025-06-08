@@ -425,5 +425,3 @@ func (ctrl *KubeRuntimeController) GetPodsCount(ctx context.Context, namespace s
 
 	return len(podList.Items), nil
 }
-
-func (ctrl *KubeRuntimeController) GetAvailableRevisions(ctx context.Context, deployName, nameSpace string) ([]string, error) {
