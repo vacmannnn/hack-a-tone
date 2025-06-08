@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hack-a-tone/internal/adapters"
+	"hack-a-tone/internal/adapters/storage"
 	"hack-a-tone/internal/core/domain"
 	"io"
 	"log/slog"
@@ -14,31 +15,28 @@ import (
 	"time"
 )
 
-const (
-	token    = "8000937203:AAHC8ZofmbGMGFw5gbOVPnfLqwdrgOarjYs"
-	waitTime = 2 * time.Second
-)
+const waitTime = 2 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	//db, err := storage.NewSQLRepo()
-	//if err != nil {
-	//	slog.Error("Не удалось создать репозиторий", "error", err)
-	//}
+	db, err := storage.NewSQLRepo()
+	if err != nil {
+		slog.Error("Не удалось создать репозиторий", "error", err)
+	}
 
 	slog.SetDefault(adapters.SetupLogger(adapters.EnvLocal))
 
 	controller := adapters.NewKubeRuntimeController()
-	err := controller.Start(ctx)
+	err = controller.Start(ctx)
 	time.Sleep(waitTime)
 	if err != nil {
 		slog.Error("Не удалось запустить контроллер", "error", err)
 		return
 	}
 
-	b := NewBot(token, controller, nil)
+	b := NewBot(os.Getenv("TG_BOT_KEY"), controller, db)
 
 	go func() {
 		http.HandleFunc("/alert", func(w http.ResponseWriter, r *http.Request) {
