@@ -241,7 +241,7 @@ func (b *Bot) start() {
 			edit := tgbotapi.NewEditMessageText(
 				cq.Message.Chat.ID,
 				cq.Message.MessageID,
-				"Версия была установлена ✅",
+				"Ревизия была установлена ✅",
 			)
 			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
 			b1.Send(edit)
@@ -251,7 +251,7 @@ func (b *Bot) start() {
 			edit := tgbotapi.NewEditMessageText(
 				cq.Message.Chat.ID,
 				cq.Message.MessageID,
-				"Версия не была установлена ❌",
+				"Ревизия не была установлена ❌",
 			)
 			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
 			b.Send(edit)
@@ -279,7 +279,7 @@ func (b *Bot) start() {
 			edit := tgbotapi.NewEditMessageText(
 				cq.Message.Chat.ID,
 				cq.Message.MessageID,
-				"Ревизия не была установлена ❌",
+				"Deployment не был перезапущен ❌",
 			)
 			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
 			b.Send(edit)
@@ -521,7 +521,7 @@ func (b *Bot) SendMsg(a domain.Alert) {
 func PrettyPrintStatus(deploys []domain.DeployStatus) string {
 	var sb strings.Builder
 
-	for _, deploy := range deploys {
+	for i, deploy := range deploys {
 		sb.WriteString(fmt.Sprintf("Deployment `%s` (#%d)\n", deploy.Name, i+1))
 		sb.WriteString(fmt.Sprintf("Status: %s\n", deploy.Status))
 		if len(deploy.Pods) == 0 {
