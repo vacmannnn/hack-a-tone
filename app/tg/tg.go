@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	tgbotapi "github.com/Syfaro/telegram-bot-api"
 	"hack-a-tone/internal/core/domain"
 	"hack-a-tone/internal/core/port"
+	"io"
 	"log"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -379,6 +382,40 @@ func (b *Bot) start() {
 			}
 
 		case ViewData:
+			urlDashbord := "http://localhost:3000/render/d/efa86fd1d0c121a26444b636a3f509a9/cluster-overview?orgId=1&from=now-1h&to=now"
+			req, err := http.NewRequest("GET", urlDashbord, nil)
+			if err != nil {
+				slog.Error("Не удалось получить kafka png", err)
+			}
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Panic(err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				slog.Error("Failed to download file: %s", resp.Status)
+			}
+			buf := new(bytes.Buffer)
+
+			_, err = io.Copy(buf, resp.Body)
+			if err != nil {
+				slog.Error("Failed to copy bytes png", err)
+			}
+
+			fileBytes := tgbotapi.FileBytes{
+				Name:  "dashboard.png",
+				Bytes: buf.Bytes(),
+			}
+
+			photoMsg := tgbotapi.NewPhotoUpload(update.Message.Chat.ID, fileBytes)
+			_, err = b.bot.Send(photoMsg)
+			if err != nil {
+				log.Panic(err)
+			}
+
 			deployStatus, err := b.k8sController.StatusAll(context.Background())
 			if err != nil {
 				slog.Error("Не удалось получить общий статус", err)
