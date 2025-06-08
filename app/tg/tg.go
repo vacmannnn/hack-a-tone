@@ -14,8 +14,6 @@ import (
 	"strings"
 )
 
-var OurChatID int64
-
 var (
 	ViewData          = "Посмотреть данные о системе 📊"
 	AddPods           = "Увеличить количество подов ➕"
@@ -151,6 +149,60 @@ func mustJSON(v interface{}) string {
 	return string(b)
 }
 
+var ChatIDToNamespaces = map[int64][]string{}
+var NamespacesToChatIDs = map[string][]int64{}
+
+func WaitStrings(b *Bot, updates *tgbotapi.UpdatesChannel, chatID int64, startMsg string) []string {
+	msg := tgbotapi.NewMessage(chatID, startMsg)
+	msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true}
+	askedMessage, _ := b.bot.Send(msg)
+
+	for listen := range *updates {
+		listenMessage := listen.Message
+		if listenMessage != nil && listenMessage.ReplyToMessage != nil &&
+			listenMessage.ReplyToMessage.MessageID == askedMessage.MessageID {
+			return strings.Split(strings.TrimSpace(listenMessage.Text), " ")
+		} else {
+			return []string{}
+		}
+	}
+	return []string{}
+}
+
+func (b *Bot) ValidateNamespaces(ns []string) (res []string) {
+	for _, n := range ns {
+		_, err := b.k8sController.GetDeployments(context.Background(), n)
+		if err == nil {
+			res = append(res, n)
+		} else {
+			slog.Info("ошибка при валидации namespace:", err)
+		}
+	}
+	return
+}
+
+func (b *Bot) RegisterNamespaces(chatID int64, ch *tgbotapi.UpdatesChannel) {
+	strs := WaitStrings(b, ch, chatID, "Введите через пробел названия неймспейсов для отслеживания")
+	if len(strs) != 0 {
+		var msgStr string
+		vld := b.ValidateNamespaces(strs)
+		if len(vld) != len(strs) {
+			msgStr = "Что-то не сошлось, с ними все ок - " + strings.Join(vld, " ") + ", а пришло - " + strings.Join(strs, " ") + "\n"
+		}
+
+		// todo: проверить что существует
+		ChatIDToNamespaces[chatID] = strs
+		for _, str := range strs {
+			a := NamespacesToChatIDs[str]
+			a = append(a, chatID)
+			NamespacesToChatIDs[str] = a
+		}
+		msg := tgbotapi.NewMessage(chatID, msgStr+fmt.Sprintf("Namespaces: %s успешно зарегистрированы !\nВведите /start для начала работы", strs))
+		b.bot.Send(msg)
+		slog.Info("New chat registered", "chatID", chatID, "namespaces", strs)
+	}
+}
+
 func (b *Bot) start() {
 	// Set update timeout
 	u := tgbotapi.NewUpdate(0)
@@ -208,10 +260,12 @@ func (b *Bot) start() {
 			continue
 		}
 
-		OurChatID = update.Message.Chat.ID
-
 		switch update.Message.Text {
 		case "/start":
+			if len(ChatIDToNamespaces[update.Message.Chat.ID]) == 0 {
+				b.RegisterNamespaces(update.Message.Chat.ID, &updates)
+				continue
+			}
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Привет ! Я создан для того, чтобы ..."+
 				"\nСконфигурируй систему, с которой хочешь работать")
 			msg.ReplyMarkup = actionButtons
@@ -347,8 +401,10 @@ func (b *Bot) start() {
 func (b *Bot) SendMsg(a Alert) {
 	var msg tgbotapi.MessageConfig
 
-	msg = tgbotapi.NewMessage(OurChatID, a.String())
-
+	ns, _ := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
+	for _, chatID := range NamespacesToChatIDs[ns] {
+		msg = tgbotapi.NewMessage(chatID, a.String())
+	}
 	b.bot.Send(msg)
 }
 

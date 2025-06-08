@@ -9,6 +9,7 @@ import (
 
 type KubeController interface {
 	GetAllPods(ctx context.Context, nameSpace string) (*corev1.PodList, error)
+	GetNamespaceFromPod(ctx context.Context, podName string) (string, error)
 	GetDeploymentFromPod(ctx context.Context, pod *corev1.Pod) (string, error)
 	GetDeployments(ctx context.Context, nameSpace string) (*v1.DeploymentList, error)
 	RestartDeployment(ctx context.Context, deployName, nameSpace string) error

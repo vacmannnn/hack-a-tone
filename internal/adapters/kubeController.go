@@ -31,6 +31,37 @@ func NewKubeRuntimeController() port.KubeController {
 	return &KubeRuntimeController{}
 }
 
+func (ctrl *KubeRuntimeController) GetNamespaceFromPod(ctx context.Context, podName string) (string, error) {
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{
+		Name:      podName,
+		Namespace: "default",
+	}
+
+	err := ctrl.client.Get(ctx, namespacedName, pod)
+	if err == nil {
+		return pod.Namespace, nil
+	}
+
+	if client.IgnoreNotFound(err) != nil {
+		return "", fmt.Errorf("failed to get pod: %w", err)
+	}
+
+	podList := &corev1.PodList{}
+	if err := ctrl.client.List(ctx, podList); err != nil {
+		return "", fmt.Errorf("failed to list pods: %w", err)
+	}
+
+	for _, p := range podList.Items {
+		if p.Name == podName {
+			return p.Namespace, nil
+		}
+	}
+
+	return "", fmt.Errorf("pod %s not found", podName)
+
+}
+
 func (ctrl *KubeRuntimeController) GetDeploymentFromPod(ctx context.Context, pod *corev1.Pod) (string, error) {
 	var replicaSet *v1.ReplicaSet
 	for _, ownerRef := range pod.OwnerReferences {
