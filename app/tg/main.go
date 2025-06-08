@@ -57,7 +57,7 @@ func main() {
 			}
 
 			for _, alert := range alerts {
-				b.SendMsg(alert)
+				b.SendAlert(alert)
 			}
 		})
 
