@@ -48,7 +48,7 @@ func (ctrl *KubeRuntimeController) GetNamespaceFromPod(ctx context.Context, podN
 	}
 
 	podList := &corev1.PodList{}
-	if err := ctrl.client.List(ctx, podList); err != nil {
+	if err = ctrl.client.List(ctx, podList); err != nil {
 		return "", fmt.Errorf("failed to list pods: %w", err)
 	}
 
@@ -323,6 +323,29 @@ func (ctrl *KubeRuntimeController) RestartPod(ctx context.Context, nameSpace, po
 	return nil
 }
 
+func getDeploymentStatus(deploy v1.Deployment) string {
+	for _, cond := range deploy.Status.Conditions {
+		if cond.Type == v1.DeploymentAvailable {
+			if cond.Status == corev1.ConditionTrue {
+				return "Available"
+			} else if cond.Reason != "" {
+				return cond.Reason // например: "MinimumReplicasNotAvailable"
+			}
+		}
+		if cond.Type == v1.DeploymentProgressing {
+			if cond.Status == corev1.ConditionFalse && cond.Reason != "" {
+				return cond.Reason // например: "ReplicaSetCreateError", "DeadlineExceeded"
+			}
+		}
+	}
+
+	if deploy.Spec.Replicas != nil && deploy.Status.Replicas < *deploy.Spec.Replicas {
+		return "Progressing"
+	}
+
+	return "Unknown"
+}
+
 func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]domain.DeployStatus, error) {
 	var deployments v1.DeploymentList
 	if err := ctrl.client.List(ctx, &deployments); err != nil {
@@ -337,13 +360,9 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]domain.Depl
 		if err := ctrl.client.List(ctx, &podList, selector); err != nil {
 			return nil, fmt.Errorf("failed to list pods for deployment %s: %w", deploy.Name, err)
 		}
-
 		pods := make(map[string]domain.PodStatus)
 
-		deployStatus := "Unknown"
-		if len(podList.Items) > 0 {
-			deployStatus = string(podList.Items[0].Status.Phase)
-		}
+		deployStatus := getDeploymentStatus(deploy)
 
 		for _, pod := range podList.Items {
 			containers := make(map[string]domain.ContainerStatus)

@@ -48,5 +48,5 @@ type Annotations struct {
 }
 
 func (a Alert) String() string {
-	return fmt.Sprintf("Alert %s.\nВ поде %s проблема: %s.", a.Labels.Alertname, a.Labels.Pod, a.Annotations.Summary)
+	return fmt.Sprintf("Alert: %s🚨\n\tPod: %s\n\tProblem: %s", a.Labels.Alertname, a.Labels.Pod, a.Annotations.Summary)
 }
