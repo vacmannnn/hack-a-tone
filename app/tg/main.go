@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"hack-a-tone/internal/adapters"
 	"hack-a-tone/internal/adapters/storage"
 	"hack-a-tone/internal/core/domain"
@@ -40,9 +39,10 @@ func main() {
 
 	go func() {
 		http.HandleFunc("/alert", func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Got alert ! Trying ro read body")
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				fmt.Println(err)
+				slog.Error("reading alert request body:", err)
 				http.Error(w, "Error reading request body", http.StatusBadRequest)
 				return
 			}
@@ -51,7 +51,7 @@ func main() {
 			var alerts domain.Alerts
 			err = json.Unmarshal(body, &alerts)
 			if err != nil {
-				fmt.Println(err)
+				slog.Error("unmarshalling alert:", err, "alert body:", string(body))
 				return
 			}
 

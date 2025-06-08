@@ -109,8 +109,10 @@ func (ctrl *KubeRuntimeController) GetDeployments(ctx context.Context, nameSpace
 		opt.Namespace = nameSpace
 	}
 
+	slog.Info("Asking k8s client to list deployments for namespace -", nameSpace)
 	err := ctrl.client.List(ctx, response, opt)
 	if err != nil {
+		slog.Error("Get deployment list:", err)
 		return nil, fmt.Errorf("failed to get deployments: %w", err)
 	}
 

@@ -188,6 +188,7 @@ func WaitStrings(b *Bot, updates *tgbotapi.UpdatesChannel, chatID int64, startMs
 
 func (b *Bot) ValidateNamespaces(ns []string) (res []string) {
 	for _, n := range ns {
+		slog.Info("Trying to get deployments for", ns)
 		_, err := b.k8sController.GetDeployments(context.Background(), n)
 		if err == nil {
 			res = append(res, n)
@@ -199,11 +200,14 @@ func (b *Bot) ValidateNamespaces(ns []string) (res []string) {
 }
 
 func (b *Bot) RegisterNamespaces(chatID int64, ch *tgbotapi.UpdatesChannel) {
+	slog.Info("Starting register namespaces to chat -", chatID)
 	strs := WaitStrings(b, ch, chatID, "Введите через пробел названия неймспейсов для отслеживания")
 	if len(strs) != 0 {
+		slog.Info("Got not empty namespaces list to register chat with ID", chatID)
 		var msgStr string
 		vld := b.ValidateNamespaces(strs)
 		if len(vld) != len(strs) {
+			slog.Info("Some namespaces didnt pass validation:", "passed", vld, "all", strs)
 			msgStr = "Что-то не сошлось, с ними все ок - " + strings.Join(vld, " ") + ", а пришло - " + strings.Join(strs, " ") + "\n"
 		}
 
