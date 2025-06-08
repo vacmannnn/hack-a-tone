@@ -329,6 +329,28 @@ func (b *Bot) start() {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, a)
 			b.bot.Send(msg)
 
+		case SeeLastIncidents:
+			ask1 := "Введите количество последних инцидентов, которые вы хотите посмотреть\n"
+			incidentsNum := WaitNumber(b, &updates, update.Message.Chat.ID, ask1, 20)
+			if incidentsNum < 1 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите положительное число меньше 20")
+				msg.ReplyMarkup = actionButtons
+				b.bot.Send(msg)
+				continue
+			}
+			alerts, err := b.repo.GetLastNAlerts(int(incidentsNum), ChatIDToNamespaces[update.Message.Chat.ID])
+			if err != nil {
+				slog.Error("getting last n alerts from repo:", "error", err)
+			}
+
+			var astr []string
+			for _, a := range alerts {
+				astr = append(astr, a.String())
+			}
+			a := strings.Join(astr, "\n")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, a)
+			b.bot.Send(msg)
+
 		case RollbackVersion:
 			ns, depl, status := b.AskNsAndDeploy(&updates, currentChatID)
 			if status != Ok {
