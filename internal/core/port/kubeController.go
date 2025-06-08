@@ -19,4 +19,5 @@ type KubeController interface {
 	GetAvailableRevisions(ctx context.Context, deployName, nameSpace string) ([]string, error)
 	SetRevision(ctx context.Context, deployName, namespace string, revision string) error
 	Start(ctx context.Context) error
+	GetPodsCount(ctx context.Context, namespace string, deployName string) (int, error)
 }
