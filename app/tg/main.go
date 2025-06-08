@@ -39,7 +39,7 @@ func main() {
 
 	go func() {
 		http.HandleFunc("/alert", func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Got alert ! Trying ro read body")
+			slog.Info("Got alert! Trying ro read body")
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				slog.Error("reading alert request body:", err)
@@ -47,6 +47,7 @@ func main() {
 				return
 			}
 			defer r.Body.Close()
+			slog.Info("Read alert body", "body", string(body))
 
 			var alerts domain.Alerts
 			err = json.Unmarshal(body, &alerts)

@@ -510,7 +510,11 @@ func (b *Bot) start() {
 func (b *Bot) SendMsg(a domain.Alert) {
 	var msg tgbotapi.MessageConfig
 
-	ns, _ := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
+	ns, err := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
+	if err != nil {
+		slog.Error("getting namespace from pod name", err)
+	}
+
 	//err := b.repo.WriteAlert(a, ns)
 	//if err != nil {
 	//	slog.Error("Не удалось записать алерт", err)
