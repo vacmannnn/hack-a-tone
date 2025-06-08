@@ -507,10 +507,10 @@ func (b *Bot) SendMsg(a domain.Alert) {
 	var msg tgbotapi.MessageConfig
 
 	ns, _ := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
-	err := b.repo.WriteAlert(a, ns)
-	if err != nil {
-		slog.Error("Не удалось записать алерт", err)
-	}
+	//err := b.repo.WriteAlert(a, ns)
+	//if err != nil {
+	//	slog.Error("Не удалось записать алерт", err)
+	//}
 
 	for _, chatID := range NamespacesToChatIDs[ns] {
 		msg = tgbotapi.NewMessage(chatID, a.String())

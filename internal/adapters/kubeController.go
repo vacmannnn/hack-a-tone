@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const TlsOFF = true
+const TlsOFF = false
 
 type KubeRuntimeController struct {
 	client       client.Client
@@ -184,8 +184,10 @@ func (ctrl *KubeRuntimeController) Start(ctx context.Context) error {
 		}
 	}()
 
+	slog.Info("Создание client controller runtime...")
 	ctrl.client = mgr.GetClient()
 
+	slog.Info("Создание client versioned controller runtime...")
 	c, err := versioned.NewForConfig(cfg)
 	if err != nil {
 		slog.Error("Не удалось создать client", "error", err)
