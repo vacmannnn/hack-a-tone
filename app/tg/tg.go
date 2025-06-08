@@ -16,10 +16,9 @@ import (
 
 var (
 	ViewData          = "Посмотреть данные о системе 📊"
-	AddPods           = "Увеличить количество подов ➕"
-	RemovePods        = "Уменьшить количество подов ➖"
-	RestartDeployment = "Перезагрузить деплоймент 🔄"
-	RestartPod        = "Перезагрузить под 🔁"
+	ChangePods        = "Изменить количество подов 🔢"
+	RestartDeployment = "Перезапустить деплоймент 🔄"
+	RestartPod        = "Перезапустить под 🔁"
 	RollbackVersion   = "Откатить версию 🔙"
 )
 
@@ -30,8 +29,7 @@ var actionButtons = tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButton(RollbackVersion),
 	),
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton(AddPods),
-		tgbotapi.NewKeyboardButton(RemovePods),
+		tgbotapi.NewKeyboardButton(ChangePods),
 		tgbotapi.NewKeyboardButton(RestartPod),
 	),
 )
@@ -94,6 +92,23 @@ func WaitNumber(b *Bot, updates *tgbotapi.UpdatesChannel, chatID int64, start st
 	return -1
 }
 
+func getPodsString(b *Bot, ns string) (string, []string, error) {
+	pods, err := b.k8sController.GetAllPods(context.Background(), ns)
+	if err != nil {
+		slog.Error("Не удалось получить все ревизии", err)
+		return "", []string{}, err
+	} else {
+		out := make([]string, len(pods.Items))
+		podsNames := make([]string, len(pods.Items))
+		for i, _ := range pods.Items {
+			podsNames[i] = pods.Items[i].Name
+			out[i] = fmt.Sprintf("%d) %s", i+1, pods.Items[i].Name)
+		}
+		str := strings.Join(out, "\n")
+		return str, podsNames, nil
+	}
+}
+
 func getRevisionsString(b *Bot, ns string, depl string) (string, []string, error) {
 	revs, err := b.k8sController.GetAvailableRevisions(context.Background(), depl, ns)
 	if err != nil {
@@ -137,10 +152,10 @@ func getDeploymentsString(b *Bot, ns string) (string, []string, error) {
 }
 
 type ActionData struct {
-	Answer        string `json:"a"`
-	CurRevVersion string `json:"r"`
-	CurDeploy     string `json:"d"`
-	CurNamespace  string `json:"n"`
+	Key       string `json:"k"`
+	Revision  string `json:"r"`
+	Deploy    string `json:"d"`
+	Namespace string `json:"n"`
 }
 
 func mustJSON(v interface{}) string {
@@ -214,11 +229,11 @@ func (b *Bot) start() {
 	updates, _ := b.bot.GetUpdatesChan(u)
 
 	handlers := map[string]func(*tgbotapi.BotAPI, *tgbotapi.CallbackQuery){
-		"yes": func(b1 *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+		"roll_yes": func(b1 *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 			var data ActionData
 			json.Unmarshal([]byte(cq.Data), &data)
 
-			err := b.k8sController.SetRevision(context.Background(), data.CurDeploy, data.CurNamespace, data.CurRevVersion)
+			err := b.k8sController.SetRevision(context.Background(), data.Deploy, data.Namespace, data.Revision)
 			if err != nil {
 				slog.Error("Сan not set revision number", err)
 			}
@@ -232,11 +247,39 @@ func (b *Bot) start() {
 			b1.Send(edit)
 			b1.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, ""))
 		},
-		"no": func(b *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+		"roll_no": func(b *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
 			edit := tgbotapi.NewEditMessageText(
 				cq.Message.Chat.ID,
 				cq.Message.MessageID,
 				"Версия не была установлена ❌",
+			)
+			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
+			b.Send(edit)
+			b.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, ""))
+		},
+		"rs_yes": func(b1 *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+			var data ActionData
+			json.Unmarshal([]byte(cq.Data), &data)
+
+			err := b.k8sController.RestartDeployment(context.Background(), data.Deploy, data.Namespace)
+			if err != nil {
+				slog.Error("Сan not restart deployment", err)
+			}
+
+			edit := tgbotapi.NewEditMessageText(
+				cq.Message.Chat.ID,
+				cq.Message.MessageID,
+				"Deployment был перезапущен ✅",
+			)
+			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
+			b1.Send(edit)
+			b1.AnswerCallbackQuery(tgbotapi.NewCallback(cq.ID, ""))
+		},
+		"rs_no": func(b *tgbotapi.BotAPI, cq *tgbotapi.CallbackQuery) {
+			edit := tgbotapi.NewEditMessageText(
+				cq.Message.Chat.ID,
+				cq.Message.MessageID,
+				"Ревизия не была установлена ❌",
 			)
 			edit.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}}
 			b.Send(edit)
@@ -249,7 +292,7 @@ func (b *Bot) start() {
 			if cq := update.CallbackQuery; cq != nil {
 				var data ActionData
 				json.Unmarshal([]byte(cq.Data), &data)
-				if handler, found := handlers[data.Answer]; found {
+				if handler, found := handlers[data.Key]; found {
 					handler(b.bot, cq) // вызываем нужный обработчик
 				} else {
 					// необработанный callbackData
@@ -302,19 +345,18 @@ func (b *Bot) start() {
 				continue
 			}
 			revision := revs[revId-1]
-			print(deployment, " ", revision)
 
 			dataYes := ActionData{
-				Answer:        "yes",
-				CurRevVersion: revision,
-				CurDeploy:     deployment,
-				CurNamespace:  ns,
+				Key:       "roll_yes",
+				Revision:  revision,
+				Deploy:    deployment,
+				Namespace: ns,
 			}
 			dataNo := ActionData{
-				Answer:        "no",
-				CurRevVersion: "1",
-				CurDeploy:     "1",
-				CurNamespace:  "1",
+				Key:       "roll_no",
+				Revision:  "1",
+				Deploy:    "1",
+				Namespace: "1",
 			}
 
 			checkBtn := tgbotapi.NewInlineKeyboardButtonData("✅", mustJSON(dataYes))
@@ -323,7 +365,9 @@ func (b *Bot) start() {
 				tgbotapi.NewInlineKeyboardRow(checkBtn, crossBtn),
 			)
 
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Восстановить ревизию?"))
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+				fmt.Sprintf("Восстановить ревизию %s у deployment %s?", revision, deployment),
+			)
 			msg.ReplyMarkup = keyboard
 
 			if _, err := b.bot.Send(msg); err != nil {
@@ -336,10 +380,11 @@ func (b *Bot) start() {
 				slog.Error("Не удалось получить общий статус", err)
 			} else {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, PrettyPrintStatus(deployStatus))
+				msg.ParseMode = tgbotapi.ModeMarkdown
 				b.bot.Send(msg)
 			}
 
-		case AddPods:
+		case ChangePods:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
@@ -359,21 +404,32 @@ func (b *Bot) start() {
 			}
 			deployment := depls[deplId-1]
 
-			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько увеличить?", 30)
+			curCount, err := b.k8sController.GetPodsCount(context.Background(), ns, deployment)
+			if err != nil {
+				slog.Error("Не удалось получить количество подиков", err)
+				continue
+			}
+
+			number := WaitNumber(b, &updates, update.Message.Chat.ID,
+				fmt.Sprintf("Введите новое количество подов (сейчас %d)", curCount), 30)
 			if number != -1 {
 				err = b.k8sController.ScalePod(context.Background(), deployment, ns, int32(number))
 				if err != nil {
-					slog.Error("Не удалось увеличить подики", err)
+					slog.Error("Не удалось изменить количество подов", err)
 					continue
 				}
-				newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Добавлено %d подиков", number))
+				newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Новое количество подов: %d", number))
 				newAsk.ReplyMarkup = actionButtons
 				b.bot.Send(newAsk)
 			}
-		case RemovePods:
+
+		case RestartDeployment:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := getNamespacesString()
 			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
+			if namespaceId == -1 {
+				continue
+			}
 			ns := registeredNamespaces[namespaceId-1]
 
 			ask3 := "В каком deployment (введите число)?\n"
@@ -382,19 +438,66 @@ func (b *Bot) start() {
 				continue
 			}
 			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(depls)))
+			if deplId == -1 {
+				continue
+			}
 			deployment := depls[deplId-1]
 
-			number := WaitNumber(b, &updates, update.Message.Chat.ID, "На сколько уменьшить?", 30)
-			if number != -1 {
-				err = b.k8sController.ScalePod(context.Background(), deployment, ns, int32(-number))
-				if err != nil {
-					slog.Error("Не удалось уменьшить подики", err)
-					continue
-				}
-				newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Убавлено %d подиков", number))
-				newAsk.ReplyMarkup = actionButtons
-				b.bot.Send(newAsk)
+			dataYes := ActionData{
+				Key:       "rs_yes",
+				Revision:  "1",
+				Deploy:    deployment,
+				Namespace: ns,
 			}
+			dataNo := ActionData{
+				Key:       "rs_no",
+				Revision:  "1",
+				Deploy:    "1",
+				Namespace: "1",
+			}
+
+			checkBtn := tgbotapi.NewInlineKeyboardButtonData("✅", mustJSON(dataYes))
+			crossBtn := tgbotapi.NewInlineKeyboardButtonData("❌", mustJSON(dataNo))
+			keyboard := tgbotapi.NewInlineKeyboardMarkup(
+				tgbotapi.NewInlineKeyboardRow(checkBtn, crossBtn),
+			)
+
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+				fmt.Sprintf("Перзапустить deployment %s?", deployment),
+			)
+			msg.ReplyMarkup = keyboard
+
+			if _, err := b.bot.Send(msg); err != nil {
+				log.Println("Send message error:", err)
+			}
+
+		case RestartPod:
+			ask1 := "В каком namespace (введите число)?\n"
+			ask2 := getNamespacesString()
+			namespaceId := WaitNumber(b, &updates, update.Message.Chat.ID, ask1+ask2, int64(len(registeredNamespaces)))
+			if namespaceId == -1 {
+				continue
+			}
+			ns := registeredNamespaces[namespaceId-1]
+			ask3 := "Какой под (введите число)?\n"
+			ask4, pods, err := getPodsString(b, ns)
+			if err != nil {
+				continue
+			}
+			deplId := WaitNumber(b, &updates, update.Message.Chat.ID, ask3+ask4, int64(len(pods)))
+			if deplId == -1 {
+				continue
+			}
+			pod := pods[deplId-1]
+			err = b.k8sController.RestartPod(context.Background(), ns, pod)
+			if err != nil {
+				log.Println("Can not restart pod", err)
+				continue
+			}
+			newAsk := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Под был перезапущен"))
+			newAsk.ReplyMarkup = actionButtons
+			b.bot.Send(newAsk)
+
 		default:
 		}
 	}
@@ -419,14 +522,15 @@ func PrettyPrintStatus(deploys []domain.DeployStatus) string {
 	var sb strings.Builder
 
 	for _, deploy := range deploys {
-		sb.WriteString(fmt.Sprintf("Deployment: %s - Status: %s\n", deploy.Name, deploy.Status))
+		sb.WriteString(fmt.Sprintf("Deployment `%s` (#%d)\n", deploy.Name, i+1))
+		sb.WriteString(fmt.Sprintf("Status: %s\n", deploy.Status))
 		if len(deploy.Pods) == 0 {
 			sb.WriteString("\tNo pods found\n")
 			continue
 		}
 
 		for podName, pod := range deploy.Pods {
-			sb.WriteString(fmt.Sprintf("\tPod: %s\n", podName))
+			sb.WriteString(fmt.Sprintf("\tPod: `%s`\n", podName))
 			sb.WriteString(fmt.Sprintf("\t\tTotal CPU: %.3f cores\n", pod.TotalCPU))
 			sb.WriteString(fmt.Sprintf("\t\tTotal Memory: %.3f MB\n", pod.TotalMem))
 
@@ -436,7 +540,7 @@ func PrettyPrintStatus(deploys []domain.DeployStatus) string {
 			}
 
 			for containerName, container := range pod.Containers {
-				sb.WriteString(fmt.Sprintf("\t\tContainer: %s\n", containerName))
+				sb.WriteString(fmt.Sprintf("\t\tContainer: `%s`\n", containerName))
 				sb.WriteString(fmt.Sprintf("\t\t\tCPU: %.3f cores\n", container.CPU))
 				sb.WriteString(fmt.Sprintf("\t\t\tMemory: %.3f MB\n", container.Memory))
 			}

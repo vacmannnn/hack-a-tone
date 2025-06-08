@@ -301,7 +301,7 @@ func (ctrl *KubeRuntimeController) SetRevision(ctx context.Context, deployName, 
 }
 
 func (ctrl *KubeRuntimeController) RestartPod(ctx context.Context, nameSpace, podName string) error {
-	var pod *corev1.Pod
+	pod := &corev1.Pod{}
 	pod.Namespace = nameSpace
 	pod.Name = podName
 
@@ -393,4 +393,24 @@ func (ctrl *KubeRuntimeController) getContainerResourceUsage(ctx context.Context
 	}
 	// Контейнер не найден в метриках
 	return 0, 0, fmt.Errorf("container %s not found in pod metrics %s/%s", containerName, namespace, podName)
+}
+
+func (ctrl *KubeRuntimeController) GetPodsCount(ctx context.Context, namespace string, deployName string) (int, error) {
+	var deployment v1.Deployment
+	err := ctrl.client.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      deployName,
+	}, &deployment)
+	if err != nil {
+		slog.Error("Failed to get deployment", "name", deployName, "namespace", namespace, "error", err)
+		return 0, fmt.Errorf("failed to get deployment %s: %w", deployName, err)
+	}
+
+	selector := client.MatchingLabels(deployment.Spec.Selector.MatchLabels)
+	var podList corev1.PodList
+	if err := ctrl.client.List(ctx, &podList, selector); err != nil {
+		return 0, fmt.Errorf("failed to list pods for deployment %s: %w", deployment.Name, err)
+	}
+
+	return len(podList.Items), nil
 }
