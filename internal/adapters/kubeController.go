@@ -188,16 +188,22 @@ func (ctrl *KubeRuntimeController) Start(ctx context.Context) error {
 
 	time.Sleep(2 * time.Second)
 	slog.Info("Создание client controller runtime...")
-	ctrl.client = mgr.GetClient()
-
-	slog.Info("Создание client versioned controller runtime...")
-	c, err := versioned.NewForConfig(cfg)
+	c, err := client.New(cfg, client.Options{})
 	if err != nil {
 		slog.Error("Не удалось создать client", "error", err)
 		return err
 	}
 
-	ctrl.metricClient = c
+	ctrl.client = c
+
+	slog.Info("Создание client versioned controller runtime...")
+	cMetrics, err := versioned.NewForConfig(cfg)
+	if err != nil {
+		slog.Error("Не удалось создать client", "error", err)
+		return err
+	}
+
+	ctrl.metricClient = cMetrics
 	ctrl.mgr = mgr
 
 	return err
@@ -419,3 +425,5 @@ func (ctrl *KubeRuntimeController) GetPodsCount(ctx context.Context, namespace s
 
 	return len(podList.Items), nil
 }
+
+func (ctrl *KubeRuntimeController) GetAvailableRevisions(ctx context.Context, deployName, nameSpace string) ([]string, error) {
