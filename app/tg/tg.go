@@ -9,8 +9,12 @@ import (
 	"hack-a-tone/internal/core/domain"
 	"hack-a-tone/internal/core/port"
 	"io"
-	"log/slog"
 	"net/http"
+
+	"image"
+	"image/png"
+	"log/slog"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -326,6 +330,28 @@ func (b *Bot) start() {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, a)
 			b.bot.Send(msg)
 
+		case SeeLastIncidents:
+			ask1 := "Введите количество последних инцидентов, которые вы хотите посмотреть\n"
+			incidentsNum := WaitNumber(b, &updates, update.Message.Chat.ID, ask1, 20)
+			if incidentsNum < 1 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите положительное число меньше 20")
+				msg.ReplyMarkup = actionButtons
+				b.bot.Send(msg)
+				continue
+			}
+			alerts, err := b.repo.GetLastNAlerts(int(incidentsNum), ChatIDToNamespaces[update.Message.Chat.ID])
+			if err != nil {
+				slog.Error("getting last n alerts from repo:", "error", err)
+			}
+
+			var astr []string
+			for _, a := range alerts {
+				astr = append(astr, a.String())
+			}
+			a := strings.Join(astr, "\n")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, a)
+			b.bot.Send(msg)
+
 		case RollbackVersion:
 			ns, depl, status := b.AskNsAndDeploy(&updates, currentChatID)
 			if status != Ok {
@@ -364,40 +390,7 @@ func (b *Bot) start() {
 			b.MessageWithReplyMarkup(currentChatID, askStr, keyboard)
 
 		case ViewData:
-			urlDashbord := "http://localhost:3000/render/d/efa86fd1d0c121a26444b636a3f509a9/cluster-overview?orgId=1&from=now-1h&to=now"
-			req, err := http.NewRequest("GET", urlDashbord, nil)
-			if err != nil {
-				slog.Error("Не удалось получить kafka png", err)
-			}
-
-			client := &http.Client{}
-			resp, err := client.Do(req)
-			if err != nil {
-				slog.Error("", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				slog.Error("Failed to download file: %s", resp.Status)
-			}
-			buf := new(bytes.Buffer)
-
-			_, err = io.Copy(buf, resp.Body)
-			if err != nil {
-				slog.Error("Failed to copy bytes png", err)
-			}
-
-			fileBytes := tgbotapi.FileBytes{
-				Name:  "dashboard.png",
-				Bytes: buf.Bytes(),
-			}
-
-			photoMsg := tgbotapi.NewPhotoUpload(update.Message.Chat.ID, fileBytes)
-			_, err = b.bot.Send(photoMsg)
-			if err != nil {
-				slog.Error("", err)
-			}
-
+			photoMsg := GetPhotoMessageForGrafana(update.Message.Chat.ID)
 			deployStatus, err := b.k8sController.StatusAll(context.Background())
 			if err != nil {
 				str := "Не удалось получить общий статус"
@@ -408,6 +401,7 @@ func (b *Bot) start() {
 				msg.ReplyMarkup = actionButtons
 				msg.ParseMode = tgbotapi.ModeMarkdown
 				b.bot.Send(msg)
+				b.bot.Send(photoMsg)
 			}
 
 		case ChangePods:
@@ -573,6 +567,91 @@ func (b *Bot) SendAlert(a domain.Alert) {
 		msg = tgbotapi.NewMessage(chatID, a.String())
 		b.bot.Send(msg)
 	}
+}
+
+func GetPhotoMessageForGrafana(chatId int64) *tgbotapi.PhotoConfig {
+	token := os.Getenv("GRAFANA_TOKEN")
+	addr := strings.Split(os.Getenv("GRAFANA_ADDR"), ":")
+	ip := addr[0]
+	port := addr[1]
+
+	url := fmt.Sprintf("http://%s:%s/render/d/efa86fd1d0c121a26444b636a3f509a9/cluster-overview?orgId=1&from=now-1h&to=now", ip, port)
+	req, err := http.NewRequest("GET", url, nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	if err != nil {
+		slog.Error("Не удалось получить kafka png", err)
+		return nil
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Не удалось получить kafka png", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Failed to download file: %s", resp.Status)
+	}
+
+	buf := new(bytes.Buffer)
+
+	_, err = io.Copy(buf, resp.Body)
+	if err != nil {
+		slog.Error("Failed to copy bytes png", err)
+		return nil
+	}
+
+	img, err := png.Decode(buf)
+	if err != nil {
+		slog.Error("Failed to decode png", err)
+		return nil
+	}
+
+	var buffNew []byte
+	buffNew, err = cropTopPixelsPNG(img, 130)
+
+	fileBytes := tgbotapi.FileBytes{
+		Name:  "dashboard.png",
+		Bytes: buffNew,
+	}
+
+	res := tgbotapi.NewPhotoUpload(chatId, fileBytes)
+	return &res
+}
+
+func cropTopPixelsPNG(img image.Image, cropY int) ([]byte, error) {
+	src, ok := img.(*image.RGBA)
+	if !ok {
+		bounds := img.Bounds()
+		src = image.NewRGBA(bounds)
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				src.Set(x, y, img.At(x, y))
+			}
+		}
+	}
+	newBounds := src.Bounds()
+	newBounds.Min.Y += cropY
+	if newBounds.Min.Y >= newBounds.Max.Y {
+		return nil, io.ErrUnexpectedEOF
+	}
+	dst := image.NewRGBA(newBounds)
+	for y := newBounds.Min.Y; y < newBounds.Max.Y; y++ {
+		for x := newBounds.Min.X; x < newBounds.Max.X; x++ {
+			dst.Set(x, y, src.At(x, y))
+		}
+	}
+	var buf bytes.Buffer
+	err := png.Encode(&buf, dst)
+	if err != nil {
+		slog.Error("Failed to encode PNG:", err)
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func PrettyPrintStatus(deploys []domain.DeployStatus) string {
