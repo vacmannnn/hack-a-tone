@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hack-a-tone/internal/adapters"
+	"hack-a-tone/internal/adapters/storage"
+	"hack-a-tone/internal/core/domain"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,56 +15,31 @@ import (
 	"time"
 )
 
-const token = "8000937203:AAHC8ZofmbGMGFw5gbOVPnfLqwdrgOarjYs"
-
-type Alerts []Alert
-
-type Alert struct {
-	Status       string                 `json:"status"`
-	Labels       Labels                 `json:"labels"`
-	Annotations  Annotations            `json:"annotations"`
-	StartsAt     time.Time              `json:"startsAt"`
-	EndsAt       time.Time              `json:"endsAt"`
-	GeneratorURL string                 `json:"generatorURL"`
-	Fingerprint  string                 `json:"fingerprint"`
-	SilenceURL   string                 `json:"silenceURL"`
-	DashboardURL string                 `json:"dashboardURL"`
-	PanelURL     string                 `json:"panelURL"`
-	Values       map[string]interface{} `json:"values"`
-	ValueString  string                 `json:"valueString"`
-	OrgId        int                    `json:"orgId"`
-}
-
-type Labels struct {
-	Alertname     string `json:"alertname"`
-	GrafanaFolder string `json:"grafana_folder"`
-	Pod           string `json:"pod"`
-}
-
-type Annotations struct {
-	Summary string `json:"summary"`
-}
-
-func (a Alert) String() string {
-	return fmt.Sprintf("Alert %s.\nВ поде %s проблема: %s.", a.Labels.Alertname, a.Labels.Pod, a.Annotations.Summary)
-}
+const (
+	token    = "8000937203:AAHC8ZofmbGMGFw5gbOVPnfLqwdrgOarjYs"
+	waitTime = 2 * time.Second
+)
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	db, err := storage.NewSQLRepo()
+	if err != nil {
+		slog.Error("Не удалось создать репозиторий", "error", err)
+	}
+
 	slog.SetDefault(adapters.SetupLogger(adapters.EnvLocal))
 
 	controller := adapters.NewKubeRuntimeController()
-	err := controller.Start(ctx)
-
-	time.Sleep(2 * time.Second)
+	err = controller.Start(ctx)
+	time.Sleep(waitTime)
 	if err != nil {
 		slog.Error("Не удалось запустить контроллер", "error", err)
 		return
 	}
 
-	b := NewBot(token, controller)
+	b := NewBot(token, controller, db)
 
 	go func() {
 		http.HandleFunc("/alert", func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +51,7 @@ func main() {
 			}
 			defer r.Body.Close()
 
-			var alerts Alerts
+			var alerts domain.Alerts
 			err = json.Unmarshal(body, &alerts)
 			if err != nil {
 				fmt.Println(err)

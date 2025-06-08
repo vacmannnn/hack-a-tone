@@ -41,6 +41,7 @@ type Bot struct {
 	k8sController port.KubeController
 	userLogged    map[string]bool
 	usersData     map[string]string
+	repo          port.AlertRepo
 }
 
 func contains(slice []string, target string) bool {
@@ -52,7 +53,7 @@ func contains(slice []string, target string) bool {
 	return false
 }
 
-func NewBot(token string, k8sController port.KubeController) *Bot {
+func NewBot(token string, k8sController port.KubeController, db port.AlertRepo) *Bot {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		slog.Error("Не удалось создать бота", "error", err)
@@ -62,6 +63,7 @@ func NewBot(token string, k8sController port.KubeController) *Bot {
 	return &Bot{
 		bot:           bot,
 		k8sController: k8sController,
+		repo:          db,
 	}
 }
 
@@ -398,13 +400,16 @@ func (b *Bot) start() {
 	}
 }
 
-func (b *Bot) SendMsg(a Alert) {
+func (b *Bot) SendMsg(a domain.Alert) {
 	var msg tgbotapi.MessageConfig
 
 	ns, _ := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
 	for _, chatID := range NamespacesToChatIDs[ns] {
 		msg = tgbotapi.NewMessage(chatID, a.String())
 	}
+	msg = tgbotapi.NewMessage(OurChatID, a.String())
+	b.repo.WriteAlert(a, "TODO")
+
 	b.bot.Send(msg)
 }
 
