@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	tgbotapi "github.com/Syfaro/telegram-bot-api"
+	"hack-a-tone/internal/core/domain"
 	"hack-a-tone/internal/core/port"
 	"log"
 	"log/slog"
@@ -22,18 +23,18 @@ var (
 	RestartDeployment = "Перезагрузить деплоймент 🔄"
 	RestartPod        = "Перезагрузить под 🔁"
 	RollbackVersion   = "Откатить версию 🔙"
-	LoremIpsum        = "Lorem ipsum 💬"
 )
 
 var actionButtons = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton(ViewData),
+		tgbotapi.NewKeyboardButton(RestartDeployment),
 		tgbotapi.NewKeyboardButton(RollbackVersion),
 	),
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton(AddPods),
 		tgbotapi.NewKeyboardButton(RemovePods),
-		tgbotapi.NewKeyboardButton(RestartDeployment),
+		tgbotapi.NewKeyboardButton(RestartPod),
 	),
 )
 
@@ -216,11 +217,6 @@ func (b *Bot) start() {
 			msg.ReplyMarkup = actionButtons
 			b.bot.Send(msg)
 
-		case LoremIpsum:
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выбери действие, которое хочешь сделать")
-			msg.ReplyMarkup = actionButtons
-			b.bot.Send(msg)
-
 		case RollbackVersion:
 			ask1 := "В каком namespace (введите число)?\n"
 			ask2 := getNamespacesString()
@@ -279,19 +275,12 @@ func (b *Bot) start() {
 			}
 
 		case ViewData:
-			for _, namespace := range registeredNamespaces {
-				deployments, err := b.k8sController.GetDeployments(context.Background(), namespace)
-				if err != nil {
-					slog.Error("Не удалось получить все деплои", err)
-				} else {
-					out := make([]string, len(deployments.Items))
-					for i, v := range deployments.Items {
-						out[i] = fmt.Sprintf("%s:%s", namespace, v.Name)
-					}
-					str := strings.Join(out, "\n")
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, str)
-					b.bot.Send(msg)
-				}
+			deployStatus, err := b.k8sController.StatusAll(context.Background())
+			if err != nil {
+				slog.Error("Не удалось получить общий статус", err)
+			} else {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, PrettyPrintStatus(deployStatus))
+				b.bot.Send(msg)
 			}
 
 		case AddPods:
@@ -361,4 +350,36 @@ func (b *Bot) SendMsg(a Alert) {
 	msg = tgbotapi.NewMessage(OurChatID, a.String())
 
 	b.bot.Send(msg)
+}
+
+func PrettyPrintStatus(deploys []domain.DeployStatus) string {
+	var sb strings.Builder
+
+	for i, deploy := range deploys {
+		sb.WriteString(fmt.Sprintf("Deployment #%d - Status: %s\n", i+1, deploy.Status))
+		if len(deploy.Pods) == 0 {
+			sb.WriteString("\tNo pods found\n")
+			continue
+		}
+
+		for podName, pod := range deploy.Pods {
+			sb.WriteString(fmt.Sprintf("\tPod: %s\n", podName))
+			sb.WriteString(fmt.Sprintf("\t\tTotal CPU: %.3f cores\n", pod.TotalCPU))
+			sb.WriteString(fmt.Sprintf("\t\tTotal Memory: %.3f MB\n", pod.TotalMem))
+
+			if len(pod.Containers) == 0 {
+				sb.WriteString("\t\tNo containers found\n")
+				continue
+			}
+
+			for containerName, container := range pod.Containers {
+				sb.WriteString(fmt.Sprintf("\t\tContainer: %s\n", containerName))
+				sb.WriteString(fmt.Sprintf("\t\t\tCPU: %.3f cores\n", container.CPU))
+				sb.WriteString(fmt.Sprintf("\t\t\tMemory: %.3f MB\n", container.Memory))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
