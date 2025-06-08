@@ -544,12 +544,17 @@ func (b *Bot) start() {
 	}
 }
 
+var PodsThatWas map[string]string
+
 func (b *Bot) SendMsg(a domain.Alert) {
 	var msg tgbotapi.MessageConfig
 
 	ns, err := b.k8sController.GetNamespaceFromPod(context.Background(), a.Labels.Pod)
 	if err != nil {
 		slog.Error("getting namespace from pod name", err)
+		ns = PodsThatWas[a.Labels.Pod]
+	} else {
+		PodsThatWas[a.Labels.Pod] = ns
 	}
 
 	//err := b.repo.WriteAlert(a, ns)
