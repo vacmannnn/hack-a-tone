@@ -6,6 +6,7 @@ toolchain go1.24.4
 
 require (
 	github.com/Syfaro/telegram-bot-api v4.6.4+incompatible
+	github.com/mattn/go-sqlite3 v1.14.28
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.1
