@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"hack-a-tone/internal/core/domain"
 	"hack-a-tone/internal/core/port"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -281,29 +282,13 @@ func (ctrl *KubeRuntimeController) RestartPod(ctx context.Context, nameSpace, po
 	return nil
 }
 
-type ContainerStatus struct {
-	CPU    float64
-	Memory float64
-}
-
-type PodStatus struct {
-	Containers map[string]ContainerStatus
-	TotalCPU   float64
-	TotalMem   float64
-}
-
-type DeployStatus struct {
-	Status string
-	Pods   map[string]PodStatus
-}
-
-func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatus, error) {
+func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]domain.DeployStatus, error) {
 	var deployments v1.DeploymentList
 	if err := ctrl.client.List(ctx, &deployments); err != nil {
 		return nil, fmt.Errorf("failed to list deployments: %w", err)
 	}
 
-	var result []DeployStatus
+	var result []domain.DeployStatus
 
 	for _, deploy := range deployments.Items {
 		selector := client.MatchingLabels(deploy.Spec.Selector.MatchLabels)
@@ -312,7 +297,7 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatu
 			return nil, fmt.Errorf("failed to list pods for deployment %s: %w", deploy.Name, err)
 		}
 
-		pods := make(map[string]PodStatus)
+		pods := make(map[string]domain.PodStatus)
 
 		deployStatus := "Unknown"
 		if len(podList.Items) > 0 {
@@ -320,7 +305,7 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatu
 		}
 
 		for _, pod := range podList.Items {
-			containers := make(map[string]ContainerStatus)
+			containers := make(map[string]domain.ContainerStatus)
 			var totalCPU, totalMem float64
 
 			for _, cs := range pod.Status.ContainerStatuses {
@@ -329,7 +314,7 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatu
 					slog.Error("Failed to get resource usage", "container", cs.Name, "pod", pod.Name, "namespace", pod.Namespace, "error", err)
 				}
 
-				containers[cs.Name] = ContainerStatus{
+				containers[cs.Name] = domain.ContainerStatus{
 					CPU:    cpuUsage,
 					Memory: memUsage,
 				}
@@ -337,14 +322,14 @@ func (ctrl *KubeRuntimeController) StatusAll(ctx context.Context) ([]DeployStatu
 				totalMem += memUsage
 			}
 
-			pods[pod.Name] = PodStatus{
+			pods[pod.Name] = domain.PodStatus{
 				Containers: containers,
 				TotalCPU:   totalCPU,
 				TotalMem:   totalMem,
 			}
 		}
 
-		result = append(result, DeployStatus{
+		result = append(result, domain.DeployStatus{
 			Status: deployStatus,
 			Pods:   pods,
 		})
