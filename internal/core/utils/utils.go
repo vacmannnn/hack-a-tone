@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"hack-a-tone/internal/adapters"
+	"hack-a-tone/internal/core/domain"
 	v1 "k8s.io/api/apps/v1"
 	"strings"
 )
@@ -11,7 +11,7 @@ func GetReplicasCountForDeployment(deployment *v1.Deployment) int32 {
 	return *deployment.Spec.Replicas
 }
 
-func PrettyPrintStatus(deploys []adapters.DeployStatus) string {
+func PrettyPrintStatus(deploys []domain.DeployStatus) string {
 	var sb strings.Builder
 
 	for i, deploy := range deploys {
