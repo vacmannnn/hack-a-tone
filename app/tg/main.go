@@ -15,10 +15,7 @@ import (
 	"time"
 )
 
-const (
-	token    = "8000937203:AAHC8ZofmbGMGFw5gbOVPnfLqwdrgOarjYs"
-	waitTime = 2 * time.Second
-)
+const waitTime = 2 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -39,7 +36,7 @@ func main() {
 		return
 	}
 
-	b := NewBot(token, controller, db)
+	b := NewBot(os.Getenv("TG_BOT_KEY"), controller, db)
 
 	go func() {
 		http.HandleFunc("/alert", func(w http.ResponseWriter, r *http.Request) {
