@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	tgbotapi "github.com/Syfaro/telegram-bot-api"
 	"hack-a-tone/internal/core/domain"
 	"hack-a-tone/internal/core/port"
+	"io"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -370,7 +373,7 @@ func (b *Bot) start() {
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if err != nil {
-				log.Panic(err)
+				slog.Error("", err)
 			}
 			defer resp.Body.Close()
 
@@ -392,7 +395,7 @@ func (b *Bot) start() {
 			photoMsg := tgbotapi.NewPhotoUpload(update.Message.Chat.ID, fileBytes)
 			_, err = b.bot.Send(photoMsg)
 			if err != nil {
-				log.Panic(err)
+				slog.Error("", err)
 			}
 
 			deployStatus, err := b.k8sController.StatusAll(context.Background())
